@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <title>氨基甲酸铵分解平衡常数测定控制程序</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
+</head>
+<body>
+    <div class="menu-bar">
+        <div class="menu-item" id="settings-menu">
+            设置
+            <div class="dropdown-menu">
+                <div class="dropdown-item" id="menu-config">配置...</div>
+                <div class="dropdown-item" id="menu-debug">调试...</div>
+                <div class="dropdown-item" id="menu-reload">重载</div>
+            </div>
+        </div>
+        
+        <div class="menu-item" id="control-menu">
+            控制
+            <div class="dropdown-menu">
+                <div class="dropdown-item" id="menu-start">启动平衡</div>
+                <div class="dropdown-item" id="menu-stop">停止</div>
+                <div class="dropdown-item" id="menu-vstart">启动储罐抽真空</div>
+                <div class="dropdown-item" id="menu-vstop">停止储罐抽真空</div>
+                <div class="dropdown-item" id="menu-vstart-b">启动体系抽真空</div>
+                <div class="dropdown-item" id="menu-vstop-b">停止体系抽真空</div>
+                <div class="dropdown-item" id="menu-airin">启动体系通大气</div>
+                <div class="dropdown-item" id="menu-stopairin">停止体系通大气</div>
+            </div>
+        </div>
+
+        <div class="menu-item" id="control-menu">
+            工具
+            <div class="dropdown-menu">
+                <div class="dropdown-item" id="open-log">查看日志</div>
+            </div>
+        </div>
+
+        <div class="menu-item" id="about-menu">
+            关于
+            <div class="dropdown-menu">
+                <div class="dropdown-item" id="menu-help">帮助</div>
+                <div class="menu-separator"></div>
+                <div class="dropdown-item" id="menu-about">关于</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="content">
+        <div class="video-container">
+            <img src="{{ url_for('video_feed') }}" class="video-placeholder" alt="摄像机画面">
+            <div class="camera-info">摄像机</div>
+        </div>
+        
+        <div class="info-panel">
+            <div class="info-item">
+                <div class="info-label">压力</div>
+                <div class="info-value" id="pressure">--</div>
+            </div>
+            
+            <div class="info-item">
+                <div class="info-label">温度</div>
+                <div class="info-value" id="temperature">--</div>
+            </div>
+            
+            <div class="info-item">
+                <div class="info-label">系统时间</div>
+                <div class="info-value" id="system-time">--:--:--</div>
+            </div>
+            
+            <div class="start-button-container">
+                <button class="start-button" id="start-button">启动平衡>>></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-message">等待</div>
+        <div class="status-info">
+            <div class="status-item">未开始</div>
+        </div>
+    </div>
+
+    <script>
+        // Run state
+        let isRunning = false;
+        let statusUpdateInterval = null;
+
+        // Menu behavior
+        document.addEventListener('DOMContentLoaded', function() {
+            const menuItems = document.querySelectorAll('.menu-item');
+            let activeMenu = null;
+            
+            // Open a menu when it is clicked
+            menuItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    if (activeMenu === this) {
+                        this.classList.remove('active');
+                        activeMenu = null;
+                    } else {
+                        if (activeMenu) {
+                            activeMenu.classList.remove('active');
+                        }
+                        this.classList.add('active');
+                        activeMenu = this;
+                    }
+                });
+            });
+            
+            // Close menus when the page is clicked
+            document.addEventListener('click', function() {
+                if (activeMenu) {
+                    activeMenu.classList.remove('active');
+                    activeMenu = null;
+                }
+            });
+            
+            // Add handlers for dropdown items
+            const dropdownItems = document.querySelectorAll('.dropdown-item');
+            dropdownItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    
+                    if (this.id === 'menu-about') {
+                        openAboutWindow();
+                    }
+                    else if (this.id === 'menu-start') {
+                        start();
+                    }
+                    else if (this.id === 'menu-stop') {
+                        stop();
+                    }
+                    else if (this.id === 'open-log') {
+                        openLog();
+                    }
+                    else if (this.id === 'menu-config') {
+                        openConfig();
+                    }
+                    else if (this.id === 'menu-debug') {
+                        openDebug();
+                    }
+                    else if (this.id === 'menu-reload') {
+                        reload();
+                    }
+                    else if (this.id === 'menu-vstart') {
+                        vstart();
+                    }
+                    else if (this.id === 'menu-vstop') {
+                        vstop();
+                    }
+                    else if (this.id === 'menu-vstart-b') {
+                        vstartb();
+                    }
+                    else if (this.id === 'menu-vstop-b') {
+                        vstopb();
+                    }
+                    else if (this.id === 'menu-airin') {
+                        airin();
+                    }
+                    else if (this.id === 'menu-stopairin') {
+                        stopairin();
+                    }
+                    else if (this.id === 'menu-help') {
+                        openHelp();
+                    }
+                    
+                    if (activeMenu) {
+                        activeMenu.classList.remove('active');
+                        activeMenu = null;
+                    }
+                });
+            });
+
+            // System time update
+            function updateSystemTime() {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString('zh-CN');
+                document.getElementById('system-time').textContent = timeString;
+            }
+            
+            // Status update
+            function updateStatus() {
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.querySelector('.status-message').textContent = data.message;
+                        document.getElementById('pressure').textContent = data.pressure;
+                        document.getElementById('temperature').textContent = data.temperature;
+                        
+                        
+                        if (data.running) {
+                            document.querySelector('.status-item').textContent = '正在平衡';
+                        } else {
+                            document.querySelector('.status-item').textContent = '未开始';
+                        }
+                        
+                        if (data.running) {
+                            document.getElementById('start-button').textContent = '停止平衡';
+                            document.getElementById('start-button').style.backgroundColor = '#dc3545';
+                            isRunning = true;
+                        } else {
+                            document.getElementById('start-button').textContent = '启动平衡>>>';
+                            document.getElementById('start-button').style.backgroundColor = '#28a745';
+                            isRunning = false;
+                        }
+                    });
+            }
+            
+            // Start equilibrium
+            function start() {
+                fetch('/api/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                isRunning = true;
+                updateStatus();
+            }
+            
+            // Stop equilibrium
+            function stop() {
+                fetch('/api/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                isRunning = false;
+                updateStatus();
+            }
+            
+            // Open the config window
+            function openConfig() {
+                fetch('/api/open_window/config/配置/400/300');
+            }
+            
+            function openDebug() {
+                fetch('/api/open_window/debug/调试/400/260');
+            }
+
+            function reload() {
+                fetch('/api/reload');
+            }
+
+            function vstart() {
+                fetch('/api/go_vacuum');
+            }
+
+            function vstop() {
+                fetch('/api/stop_vacuum');
+            }
+
+            function vstartb() {
+                fetch('/api/go_vacuum_2');
+            }
+
+            function vstopb() {
+                fetch('/api/stop_vacuum_2');
+            }
+
+            function airin() {
+                fetch('/api/airin');
+            }
+
+            function stopairin() {
+                fetch('/api/stop_airin');
+            }
+            
+            function openAboutWindow() {
+                fetch('/api/open_window/about/关于/400/400');
+            }
+            
+            function openHelp() {
+                fetch('/api/open_help')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert('无法打开帮助文件: ' + data.error);
+                        }
+                    });
+            }
+
+            function openLog() {
+                fetch('/api/open_log')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert('无法打开日志: ' + data.error);
+                        }
+                    });
+            }
+            
+            // Start button handler
+            document.getElementById('start-button').addEventListener('click', function() {
+                if (!isRunning) {
+                    start();
+                } else {
+                    stop();
+                }
+            });
+            
+            // Initialize system time
+            updateSystemTime();
+            setInterval(updateSystemTime, 1000);
+            
+            // Start the status update loop
+            updateStatus();
+            statusUpdateInterval = setInterval(updateStatus, 100);
+        });
+    </script>
+</body>
+</html>

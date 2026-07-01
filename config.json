@@ -1,0 +1,17 @@
+{
+    "cap_num": 0,
+    "port": "COM3",
+    "gaup": "COM4",
+    "delay_large": 0.5,
+    "large_diff_threshold": 50,
+    "small_diff_threshold": 8,
+    "bottom_threshold": 0.2,
+    "hsv_lower1": "[0, 100, 50]",
+    "hsv_upper1": "[30, 255, 255]",
+    "hsv_lower2": "[120, 100, 50]",
+    "hsv_upper2": "[200, 255, 255]",
+    "usemask": true,
+    "vacuum_threshold": -90,
+    "elapsed_time": 30.0,
+    "displaymode": "Webview"
+}

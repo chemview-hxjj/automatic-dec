@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Debug</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
+</head>
+<body>
+    <div class="config-container">
+        <div class="dialog-card">
+            <div class="dialog-title">Debug</div>
+            <div class="dialog-subtitle">Color mask and HSV detection settings</div>
+        </div>
+        <div class="dialog-card config-section">
+            <div class="config-row">
+                <div class="config-label">HSVL1</div>
+                <input type="text" class="config-input" id="hsvl1" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">HSVU1</div>
+                <input type="text" class="config-input" id="hsvu1" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">HSVL2</div>
+                <input type="text" class="config-input" id="hsvl2" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">HSVU2</div>
+                <input type="text" class="config-input" id="hsvu2" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">Use mask</div>
+                <select class="config-input" id="mask">
+                    <option value="True">True</option>
+                    <option value="False">False</option>
+                </select>
+            </div>
+            <div class="config-row">
+                <div class="config-label">Need reload.</div>
+            </div>
+        </div>
+        
+        <div class="dialog-card button-container">
+            <button class="config-button" id="ok-button">Apply</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentConfig();
+            
+            document.getElementById('ok-button').addEventListener('click', function() {
+                const hsvl1 = document.getElementById('hsvl1').value;
+                const hsvu1 = document.getElementById('hsvu1').value;
+                const hsvl2 = document.getElementById('hsvl2').value;
+                const hsvu2 = document.getElementById('hsvu2').value;
+                const mask = document.getElementById('mask').value === 'True';
+                
+                fetch('/api/save_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'hsv_lower1': hsvl1,
+                        'hsv_upper1': hsvu1,
+                        'hsv_lower2': hsvl2,
+                        'hsv_upper2': hsvu2,
+                        'usemask': mask
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (window.parent && window.parent.closeDialog) {
+                            window.parent.closeDialog();
+                        } else {
+                            window.close();
+                        }
+                    } else {
+                        alert('Failed to save config: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Failed to save config: ' + error);
+                });
+            });
+        });
+        
+        function loadCurrentConfig() {
+
+            fetch('/api/get_config')
+                .then(response => response.json())
+                .then(config => {
+                    if (config.hsv_lower1) {
+                        document.getElementById('hsvl1').value = config.hsv_lower1;
+                    }
+                    if (config.hsv_upper1) {
+                        document.getElementById('hsvu1').value = config.hsv_upper1;
+                    }
+                    if (config.hsv_lower2) {
+                        document.getElementById('hsvl2').value = config.hsv_lower2;
+                    }
+                    if (config.hsv_upper2) {
+                        document.getElementById('hsvu2').value = config.hsv_upper2;
+                    }
+                    if (config.usemask !== undefined) {
+                        document.getElementById('mask').value = config.usemask ? 'True' : 'False';
+                    }
+                })
+                .catch(error => {
+                    console.log('Failed to get config:', error);
+                });
+        }
+    </script>
+</body>
+</html>

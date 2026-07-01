@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Config</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
+</head>
+<body>
+    <div class="config-container">
+        <div class="dialog-card">
+            <div class="dialog-title">Config</div>
+            <div class="dialog-subtitle">Hardware ports and detection thresholds</div>
+        </div>
+        <div class="dialog-card config-section">
+            <div class="config-row">
+                <div class="config-label">Camera</div>
+                <input type="text" class="config-input" id="camera-id" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">Valve Port</div>
+                <input type="text" class="config-input" id="serial-port" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">Pressure Gauge Port</div>
+                <input type="text" class="config-input" id="pressure-port" value="">
+            </div>
+            
+            <div class="config-row">
+                <div class="config-label">Large diff. threshold</div>
+                <div class="config-input-unit">
+                    <input type="text" class="config-input" id="largediff-threshold" value="">
+                    <span class="unit-text">px</span>
+                </div>
+            </div>
+            <div class="config-row">
+                <div class="config-label">Small diff. threshold</div>
+                <div class="config-input-unit">
+                    <input type="text" class="config-input" id="smalldiff-threshold" value="">
+                    <span class="unit-text">px</span>
+                </div>
+            </div>
+            <div class="config-row">
+                <div class="config-label">Bottom threshold</div>
+                <input type="text" class="config-input" id="bottom-threshold" value="">
+            </div>
+            <div class="config-row">
+                <div class="config-label">Need reload.</div>
+            </div>
+        </div>
+        
+        <div class="dialog-card button-container">
+            <button class="config-button" id="ok-button">Apply</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCurrentConfig();
+            
+            document.getElementById('ok-button').addEventListener('click', function() {
+                const cameraId = parseInt(document.getElementById('camera-id').value);
+                const serialPort = document.getElementById('serial-port').value;
+                const pressurePort = document.getElementById('pressure-port').value;
+                const largediffThreshold = parseFloat(document.getElementById('largediff-threshold').value);
+                const smalldiffThreshold = parseFloat(document.getElementById('smalldiff-threshold').value);
+                const bottomThreshold = parseFloat(document.getElementById('bottom-threshold').value);
+                
+                if (isNaN(cameraId)) {
+                    alert('Camera ID must be a number.');
+                    return;
+                }
+                
+                fetch('/api/save_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        'cap_num': cameraId,
+                        'port': serialPort,
+                        'gaup': pressurePort,
+                        'large_diff_threshold': largediffThreshold,
+                        'small_diff_threshold': smalldiffThreshold,
+                        'bottom_threshold': bottomThreshold
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (window.parent && window.parent.closeDialog) {
+                            window.parent.closeDialog();
+                        } else {
+                            window.close();
+                        }
+                    } else {
+                        alert('Failed to save config: ' + (data.error || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    alert('Failed to save config: ' + error);
+                });
+            });
+        });
+        
+        function loadCurrentConfig() {
+            fetch('/api/get_config')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok.');
+                    }
+                    return response.json();
+                })
+                .then(config => {
+                    if (config.error) {
+                        console.error('Failed to get config:', config.error);
+                        return;
+                    }
+                    
+                    if (config.cap_num !== undefined) {
+                        document.getElementById('camera-id').value = config.cap_num;
+                    }
+                    if (config.port) {
+                        document.getElementById('serial-port').value = config.port;
+                    }
+                    if (config.gaup) {
+                        document.getElementById('pressure-port').value = config.gaup;
+                    }
+                    if (config.large_diff_threshold) {
+                        document.getElementById('largediff-threshold').value = config.large_diff_threshold;
+                    }
+                    if (config.small_diff_threshold) {
+                        document.getElementById('smalldiff-threshold').value = config.small_diff_threshold;
+                    }
+                    if (config.bottom_threshold) {
+                        document.getElementById('bottom-threshold').value = config.bottom_threshold;
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to load config:', error);
+                    alert('Failed to load current config: ' + error.message);
+                });
+        }
+    </script>
+</body>
+</html>

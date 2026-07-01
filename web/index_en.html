@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Determination of Equilibrium Constant</title>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, user-scalable=no" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
+</head>
+<body class="main-body">
+    <div class="app-shell">
+        <header class="app-header">
+            <div class="brand-block">
+                <div class="brand-logos">
+                    <img src="{{ url_for('static', filename='assets/logo.png') }}" class="brand-logo header-logo" alt="">
+                    <img src="{{ url_for('static', filename='assets/tju.png') }}" class="brand-logo header-logo" alt="">
+                </div>
+                <div>
+                    <div class="app-title">Determination of Equilibrium Constant</div>
+                    <div class="app-subtitle">Ammonium carbamate decomposition control console</div>
+                </div>
+            </div>
+            <div class="run-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-state">Stopped</span>
+            </div>
+        </header>
+
+        <main class="console-grid">
+            <section class="video-panel">
+                <div class="video-frame">
+                    <img src="{{ url_for('video_feed') }}" class="video-placeholder" alt="">
+                    <div class="camera-info">Camera</div>
+                </div>
+            </section>
+
+            <aside class="side-stack">
+                <section class="telemetry-panel">
+                    <div class="metric-tile metric-primary">
+                        <div class="metric-label">Pressure</div>
+                        <div class="metric-value" id="pressure">0.00 kPa</div>
+                    </div>
+                    <div class="metric-grid">
+                        <div class="metric-tile">
+                            <div class="metric-label">Pressure Limit</div>
+                            <div class="metric-value" id="set-pressure">-90.0 kPa</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="metric-label">Set Time</div>
+                            <div class="metric-value" id="set-elaptime">30 s</div>
+                        </div>
+                        <div class="metric-tile">
+                            <div class="metric-label">Elapsed</div>
+                            <div class="metric-value" id="elapsed-time">0.0 s</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="setpoint-panel">
+                    <div class="setpoint-row">
+                        <label for="pressure-input">Pressure Limit</label>
+                        <div class="input-action">
+                            <input type="number" step="any" id="pressure-input" class="edit-input" placeholder="-90">
+                            <span class="unit-text">kPa</span>
+                            <button class="control-button small accent" id="apply-pressure-btn">Apply</button>
+                        </div>
+                    </div>
+                    <div class="setpoint-row">
+                        <label for="elaptime-input">Equilibrium Time</label>
+                        <div class="input-action">
+                            <input type="number" step="any" id="elaptime-input" class="edit-input" placeholder="30">
+                            <span class="unit-text">s</span>
+                            <button class="control-button small accent" id="apply-elaptime-btn">Apply</button>
+                        </div>
+                    </div>
+                </section>
+            </aside>
+        </main>
+
+        <section class="control-deck">
+            <div class="control-group primary-actions">
+                <button class="control-button run" id="start-button">Start Equilibrium</button>
+            </div>
+            <div class="control-group">
+                <button class="control-button" id="evac-cache-start">Evac Reservoir</button>
+                <button class="control-button" id="evac-system-start">Evac System</button>
+                <button class="control-button" id="vent-start">Evac System S</button>
+                <button class="control-button stop" id="evac-cache-stop">Stop Evac Reservoir</button>
+                <button class="control-button stop" id="evac-system-stop">Stop Evac System</button>
+                <button class="control-button" id="vent-stop">Vent System S</button>
+            </div>
+            <div class="control-group utility-actions">
+                <button class="control-button utility" id="config-button">Config</button>
+                <button class="control-button utility" id="debug-button">Debug</button>
+                <button class="control-button utility" id="reload-button">Reload</button>
+                <button class="control-button utility" id="open-log">Log</button>
+                <button class="control-button utility" id="help-button">Help</button>
+                <button class="control-button utility" id="about-button">About</button>
+            </div>
+        </section>
+    </div>
+
+    <div class="iframe-dialog" id="iframe-dialog" aria-hidden="true">
+        <div class="iframe-scrim" id="iframe-scrim"></div>
+        <section class="iframe-panel" role="dialog" aria-modal="true" aria-labelledby="iframe-title">
+            <div class="iframe-titlebar">
+                <div id="iframe-title">Dialog</div>
+                <button class="iframe-close" id="iframe-close" type="button">Close</button>
+            </div>
+            <iframe id="dialog-frame" title="Dialog"></iframe>
+        </section>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-message">Waiting</div>
+        <div class="status-info">
+            <div class="status-item">Stopped</div>
+        </div>
+    </div>
+
+    <script>
+        let isRunning = false;
+        let statusUpdateInterval = null;
+
+        document.addEventListener('DOMContentLoaded', function() {
+            function applyPressure(value) {
+                return fetch('/api/set_pressure', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ pressure: parseFloat(value) })
+                }).then(response => response.json());
+            }
+
+            function applyElapsedTime(value) {
+                return fetch('/api/set_elapsed_time', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ elapsed_time: parseFloat(value) })
+                }).then(response => response.json());
+            }
+
+            function updateStatus() {
+                fetch('/api/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        document.querySelector('.status-message').textContent = data.message;
+                        document.getElementById('pressure').textContent = data.pressure;
+                        document.getElementById('set-pressure').textContent = `${Number(data.vacuum_threshold).toFixed(1)} kPa`;
+                        document.getElementById('set-elaptime').textContent = `${Number(data.elapsed_time).toFixed(0)} s`;
+                        document.getElementById('elapsed-time').textContent = `${Number(data.current_elapsed_time).toFixed(1)} s`;
+
+                        isRunning = Boolean(data.running);
+                        document.querySelector('.status-item').textContent = isRunning ? 'Running' : 'Stopped';
+                        document.getElementById('status-state').textContent = isRunning ? 'Running' : 'Stopped';
+                        document.getElementById('status-dot').classList.toggle('active', isRunning);
+
+                        const startButton = document.getElementById('start-button');
+                        startButton.textContent = isRunning ? 'Stop Equilibrium' : 'Start Equilibrium';
+                        startButton.classList.toggle('danger', isRunning);
+                    })
+                    .catch(error => console.error('Failed to get status:', error));
+            }
+
+            function start() {
+                fetch('/api/start', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                isRunning = true;
+                updateStatus();
+            }
+
+            function stop() {
+                fetch('/api/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                isRunning = false;
+                updateStatus();
+            }
+
+            function openDialog(path, title) {
+                const dialog = document.getElementById('iframe-dialog');
+                const frame = document.getElementById('dialog-frame');
+                document.getElementById('iframe-title').textContent = title;
+                frame.src = path;
+                dialog.classList.add('open');
+                dialog.setAttribute('aria-hidden', 'false');
+            }
+
+            window.closeDialog = function() {
+                const dialog = document.getElementById('iframe-dialog');
+                const frame = document.getElementById('dialog-frame');
+                dialog.classList.remove('open');
+                dialog.setAttribute('aria-hidden', 'true');
+                frame.src = 'about:blank';
+            };
+
+            function openConfig() {
+                openDialog('/config', 'Config');
+            }
+
+            function openDebug() {
+                openDialog('/debug', 'Debug');
+            }
+
+            function reload() {
+                fetch('/api/reload');
+            }
+
+            function vstart() {
+                fetch('/api/go_vacuum');
+            }
+
+            function vstop() {
+                fetch('/api/stop_vacuum');
+            }
+
+            function vstartb() {
+                fetch('/api/go_vacuum_2');
+            }
+
+            function vstopb() {
+                fetch('/api/stop_vacuum_2');
+            }
+
+            function vstarts() {
+                fetch('/api/go_vacuum_3');
+            }
+
+            function airin() {
+                fetch('/api/airin');
+            }
+
+            function openAboutWindow() {
+                openDialog('/about', 'About');
+            }
+
+            function openHelp() {
+                fetch('/api/open_help')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert('Failed to open help file: ' + data.error);
+                        }
+                    });
+            }
+
+            function openLog() {
+                fetch('/api/open_log')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (!data.success) {
+                            alert('Failed to open log: ' + data.error);
+                        }
+                    });
+            }
+
+            document.getElementById('start-button').addEventListener('click', function() {
+                if (!isRunning) {
+                    start();
+                } else {
+                    stop();
+                }
+            });
+
+            document.getElementById('evac-cache-start').addEventListener('click', vstart);
+            document.getElementById('evac-cache-stop').addEventListener('click', vstop);
+            document.getElementById('evac-system-start').addEventListener('click', vstartb);
+            document.getElementById('evac-system-stop').addEventListener('click', vstopb);
+            document.getElementById('vent-start').addEventListener('click', vstarts);
+            document.getElementById('vent-stop').addEventListener('click', airin);
+            document.getElementById('config-button').addEventListener('click', openConfig);
+            document.getElementById('debug-button').addEventListener('click', openDebug);
+            document.getElementById('reload-button').addEventListener('click', reload);
+            document.getElementById('open-log').addEventListener('click', openLog);
+            document.getElementById('help-button').addEventListener('click', openHelp);
+            document.getElementById('about-button').addEventListener('click', openAboutWindow);
+            document.getElementById('iframe-close').addEventListener('click', window.closeDialog);
+            document.getElementById('iframe-scrim').addEventListener('click', window.closeDialog);
+
+            const applyPressureBtn = document.getElementById('apply-pressure-btn');
+            const pressureInput = document.getElementById('pressure-input');
+            applyPressureBtn.addEventListener('click', function() {
+                const rawValue = pressureInput.value.trim();
+                if (rawValue === "") {
+                    alert("Enter a pressure limit.");
+                    return;
+                }
+                const numValue = parseFloat(rawValue);
+                if (isNaN(numValue)) {
+                    alert("Enter a valid number.");
+                    return;
+                }
+                applyPressure(numValue)
+                    .then(data => {
+                        if (!data.success) {
+                            alert('Failed to save pressure limit: ' + data.error);
+                        }
+                        updateStatus();
+                    })
+                    .catch(err => console.error('Failed to save pressure limit:', err));
+            });
+
+            const applyElapsedTimeBtn = document.getElementById('apply-elaptime-btn');
+            const elapsedTimeInput = document.getElementById('elaptime-input');
+            applyElapsedTimeBtn.addEventListener('click', function() {
+                const rawValue = elapsedTimeInput.value.trim();
+                if (rawValue === "") {
+                    alert("Enter an elapsed time.");
+                    return;
+                }
+                const numValue = parseFloat(rawValue);
+                if (isNaN(numValue) || numValue <= 0) {
+                    alert("Enter a valid positive number.");
+                    return;
+                }
+                applyElapsedTime(numValue)
+                    .then(data => {
+                        if (!data.success) {
+                            alert('Failed to save elapsed time: ' + data.error);
+                        }
+                        updateStatus();
+                    })
+                    .catch(err => console.error('Failed to save elapsed time:', err));
+            });
+
+            updateStatus();
+            statusUpdateInterval = setInterval(updateStatus, 100);
+        });
+    </script>
+</body>
+</html>
